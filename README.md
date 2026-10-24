@@ -2,6 +2,10 @@
   <img src="assets/banner.png" alt="TinaMusic Banner" width="100%">
 </p>
 
+<p align="center">
+[![Render](https://img.shields.io/badge/Deploy-Render-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://render.com/deploy?repo=https://github.com/kurukshethrathepride/nekotaku_bot)
+</p>
+
 <h1 align="center">🌸 TinaMusic ⚡ Telegram's First Native 100% Pure C++20 Music Engine</h1>
 
 <p align="center">
