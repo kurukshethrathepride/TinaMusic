@@ -61,6 +61,7 @@ WORKDIR /app
 COPY --from=builder /build/bin /app/bin
 COPY --from=builder /build/locales /app/locales
 COPY --from=builder /build/start.sh /app/start.sh
+COPY --from=builder /build/data /app/data
 
 RUN chmod +x /app/start.sh /app/bin/*
 
