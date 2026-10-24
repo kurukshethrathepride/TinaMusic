@@ -1,3 +1,4 @@
+
 FROM ubuntu:24.04 AS builder
 
 WORKDIR /build
@@ -11,6 +12,7 @@ RUN apt-get update && \
         libcurl4-openssl-dev \
         libyaml-cpp-dev \
         zlib1g-dev \
+        nlohmann-json3-dev \
         curl \
         unzip \
         ca-certificates && \
@@ -18,19 +20,28 @@ RUN apt-get update && \
 
 COPY . .
 
-RUN ARCH=$(uname -m) && \
-    mkdir -p vendor/ntgcalls/lib vendor/ntgcalls/include && \
-    if [ ! -f "vendor/ntgcalls/lib/libntgcalls.a" ]; then \
-        if [ "$ARCH" = "x86_64" ]; then \
-            curl -sSL "https://github.com/pytgcalls/ntgcalls/releases/download/v2.1.0/ntgcalls.linux-x86_64-static_libs.zip" -o /tmp/ntgcalls.zip; \
-        elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
-            curl -sSL "https://github.com/pytgcalls/ntgcalls/releases/download/v2.1.0/ntgcalls.linux-arm64-static_libs.zip" -o /tmp/ntgcalls.zip; \
-        fi && \
-        unzip -q -o /tmp/ntgcalls.zip -d /tmp/ntgcalls_extracted && \
-        mv $(find /tmp/ntgcalls_extracted -name "libntgcalls.a" | head -n1) vendor/ntgcalls/lib/libntgcalls.a && \
-        cp /tmp/ntgcalls_extracted/include/ntgcalls.h vendor/ntgcalls/include/ && \
+RUN set -eux; \
+    ARCH="$(uname -m)"; \
+    mkdir -p vendor/ntgcalls/lib vendor/ntgcalls/include; \
+    if [ ! -f vendor/ntgcalls/lib/libntgcalls.a ]; then \
+        case "$ARCH" in \
+            x86_64) \
+                URL="https://github.com/pytgcalls/ntgcalls/releases/download/v2.1.0/ntgcalls.linux-x86_64-static_libs.zip" ;; \
+            aarch64|arm64) \
+                URL="https://github.com/pytgcalls/ntgcalls/releases/download/v2.1.0/ntgcalls.linux-arm64-static_libs.zip" ;; \
+            *) echo "Unsupported architecture: $ARCH"; exit 1 ;; \
+        esac; \
+        curl -fLsS "$URL" -o /tmp/ntgcalls.zip; \
+        mkdir -p /tmp/ntgcalls_extracted; \
+        unzip -q /tmp/ntgcalls.zip -d /tmp/ntgcalls_extracted; \
+        LIB="$(find /tmp/ntgcalls_extracted -name libntgcalls.a -print -quit)"; \
+        HEADER="$(find /tmp/ntgcalls_extracted -name ntgcalls.h -print -quit)"; \
+        test -n "$LIB"; \
+        test -n "$HEADER"; \
+        cp "$LIB" vendor/ntgcalls/lib/libntgcalls.a; \
+        cp "$HEADER" vendor/ntgcalls/include/ntgcalls.h; \
         rm -rf /tmp/ntgcalls.zip /tmp/ntgcalls_extracted; \
-    fi && \
+    fi; \
     make -j1
 
 FROM ubuntu:24.04
