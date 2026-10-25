@@ -39,6 +39,12 @@ public:
 
     std::optional<InputGroupCall> GetGroupCall(int64_t chat_id);
 
+    std::optional<InputGroupCall> CreateGroupCall(
+        int64_t chat_id,
+        int64_t channel_id,
+        int64_t access_hash,
+        const std::string& title);
+
     std::string JoinGroupCall(int64_t chat_id, const std::string& local_sdp_json);
 
     bool LeaveGroupCall(int64_t chat_id);
