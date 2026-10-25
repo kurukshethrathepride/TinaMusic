@@ -58,7 +58,8 @@ RUN apt-get update && \
         ca-certificates \
         libcurl4 \
         libyaml-cpp0.8 \
-        zlib1g && \
+        zlib1g \
+        python3 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -67,6 +68,8 @@ COPY --from=builder /build/bin /app/bin
 COPY --from=builder /build/locales /app/locales
 COPY --from=builder /build/start.sh /app/start.sh
 COPY --from=builder /build/data /app/data
+COPY --from=builder /opt/peer-env /opt/peer-env
+COPY --from=builder /build/generate_cache.py /app/generate_cache.py
 
 RUN chmod +x /app/start.sh /app/bin/*
 

@@ -22,21 +22,20 @@ async def main():
     users = {}
 
     try:
-        dialogs = await app.invoke(
-            raw.functions.messages.GetDialogs(
-                offset_date=0,
-                offset_id=0,
-                offset_peer=raw.types.InputPeerEmpty(),
-                limit=100,
-                hash=0,
-            )
-        )
+        # Iterate through every dialog, not just the first 100. Resolve each
+        # dialog through Pyrogram's peer storage to retrieve its MTProto hash.
+        async for dialog in app.get_dialogs(limit=0):
+            chat = dialog.chat
+            try:
+                peer = await app.resolve_peer(chat.id)
+            except Exception as exc:
+                print(f"Skipping peer {chat.id}: {exc}")
+                continue
 
-        for chat in getattr(dialogs, "chats", []):
-            if isinstance(chat, raw.types.Channel):
-                channels[str(chat.id)] = chat.access_hash
-            elif isinstance(chat, raw.types.User):
-                users[str(chat.id)] = chat.access_hash
+            if isinstance(peer, raw.types.InputPeerChannel):
+                channels[str(peer.channel_id)] = peer.access_hash
+            elif isinstance(peer, raw.types.InputPeerUser):
+                users[str(peer.user_id)] = peer.access_hash
 
         os.makedirs("data", exist_ok=True)
 
