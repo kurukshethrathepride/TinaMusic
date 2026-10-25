@@ -15,8 +15,15 @@ RUN apt-get update && \
         nlohmann-json3-dev \
         curl \
         unzip \
-        ca-certificates && \
+        ca-certificates \
+        python3 \
+        python3-venv && \
     rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/peer-env && \
+    /opt/peer-env/bin/pip install --no-cache-dir Pyrogram==2.0.106
+
+COPY --from=builder /build/generate_cache.py /app/generate_cache.py
 
 COPY . .
 
