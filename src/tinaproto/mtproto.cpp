@@ -7,7 +7,6 @@
  *   License: GNU Affero General Public License v3.0
  * ============================================================================
  */
-
 #include "tinaproto/mtproto.hpp"
 #include "tinaproto/crypto.hpp"
 #include "logger.hpp"
