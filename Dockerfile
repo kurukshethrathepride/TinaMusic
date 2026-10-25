@@ -23,8 +23,6 @@ RUN apt-get update && \
 RUN python3 -m venv /opt/peer-env && \
     /opt/peer-env/bin/pip install --no-cache-dir Pyrogram==2.0.106
 
-COPY --from=builder /build/generate_cache.py /app/generate_cache.py
-
 COPY . .
 
 RUN set -eux; \
