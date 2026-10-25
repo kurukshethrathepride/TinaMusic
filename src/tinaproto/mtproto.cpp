@@ -429,18 +429,21 @@ bool MtprotoClient::LoadPeerCache(const std::string& cache_path) {
 }
 
 
+
 bool MtprotoClient::ResolveChannel(
     int64_t chat_id,
     int64_t& out_channel_id,
     int64_t& out_access_hash)
 {
-    // Convert a Bot API supergroup/channel ID (-100XXXXXXXXXX)
-    // into the MTProto channel ID.
     if (chat_id >= 0) {
-        Logger::Error("TINAPROTO", "Expected a negative Bot API channel ID");
+        Logger::Error(
+            "TINAPROTO",
+            "Cannot resolve channel: expected a negative Bot API supergroup ID"
+        );
         return false;
     }
 
+    // Convert -1003836241604 to channel ID 3836241604.
     int64_t channel_id = -chat_id;
 
     if (channel_id > 1000000000000LL) {
@@ -454,18 +457,27 @@ bool MtprotoClient::ResolveChannel(
 
     out_channel_id = channel_id;
 
-    // First try the cached access hash.
-    auto it = channel_access_hashes_.find(channel_id);
+    const auto it = channel_access_hashes_.find(channel_id);
 
     if (it != channel_access_hashes_.end()) {
         out_access_hash = it->second;
+
+        Logger::Info(
+            "TINAPROTO",
+            "Resolved channel " + std::to_string(channel_id) +
+            " using cached MTProto entity"
+        );
+
         return true;
     }
 
-    Logger::Warn(
+    Logger::Error(
         "TINAPROTO",
-        "Channel " + std::to_string(channel_id) +
-        " is not cached; MTProto entity resolution is required"
+        "Missing MTProto access_hash for channel " +
+        std::to_string(channel_id) +
+        (session_.is_bot
+            ? ". Session is bot-authorized; a user-only dialog lookup cannot resolve it."
+            : ". A valid channel entity must be retrieved and cached.")
     );
 
     return false;
