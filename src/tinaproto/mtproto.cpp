@@ -517,6 +517,62 @@ bool MtprotoClient::ResolveChannel(
 }
 
 
+std::optional<InputGroupCall> MtprotoClient::CreateGroupCall(
+    int64_t chat_id,
+    int64_t channel_id,
+    int64_t access_hash,
+    const std::string& title)
+{
+    if (session_.is_bot) {
+        Logger::Warn("TINAPROTO", "phone.createGroupCall requires a user-authorized session; bot session cannot create a call");
+        return std::nullopt;
+    }
+
+    int32_t random_id = 0;
+    if (getrandom(&random_id, sizeof(random_id), 0) != sizeof(random_id)) {
+        random_id = static_cast<int32_t>(Crypto::GenerateMsgId() & 0x7fffffff);
+    }
+
+    TlWriter w;
+    w.PutUint32(0x48cdc6d8); // phone.createGroupCall
+    w.PutUint32(1);          // flags: title is present
+    w.PutUint32(0xf35aec28); // inputPeerChannel
+    w.PutInt64(channel_id);
+    w.PutInt64(access_hash);
+    w.PutInt32(random_id);
+    w.PutString(title);
+
+    const std::vector<uint8_t> resp = SendRpc(w.TakeData());
+    if (resp.empty()) {
+        Logger::Error("TINAPROTO", "phone.createGroupCall failed for chat " + std::to_string(chat_id) +
+                      "; check user-session authorization and manage-call/admin permissions");
+        return std::nullopt;
+    }
+
+    // Updates contains updateGroupCall and a GroupCall object. Extract the
+    // GroupCall constructor and its fields (flags, id, access_hash).
+    for (size_t i = 0; i + 24 <= resp.size(); ++i) {
+        uint32_t magic = 0;
+        std::memcpy(&magic, resp.data() + i, sizeof(magic));
+        if (magic != 0xefb2b617) continue;
+
+        int64_t call_id = 0;
+        int64_t call_hash = 0;
+        std::memcpy(&call_id, resp.data() + i + 8, sizeof(call_id));
+        std::memcpy(&call_hash, resp.data() + i + 16, sizeof(call_hash));
+        if (call_id == 0 || call_hash == 0) continue;
+
+        InputGroupCall call{call_id, call_hash, true};
+        group_calls_[chat_id] = call;
+        Logger::Info("TINAPROTO", "Created group call for chat " + std::to_string(chat_id) +
+                     " (id: " + std::to_string(call_id) + ")");
+        return call;
+    }
+
+    Logger::Error("TINAPROTO", "phone.createGroupCall returned Updates but no GroupCall object was found");
+    return std::nullopt;
+}
+
 std::optional<InputGroupCall> MtprotoClient::GetGroupCall(int64_t chat_id) {
     auto git = group_calls_.find(chat_id);
     if (git != group_calls_.end() && git->second.valid) {
@@ -541,15 +597,37 @@ std::optional<InputGroupCall> MtprotoClient::GetGroupCall(int64_t chat_id) {
     for (int retry = 0; retry < 2; ++retry) {
         std::vector<uint8_t> resp = SendRpc(query_bytes);
         if (!resp.empty()) {
-            for (size_t i = 0; i + 20 <= resp.size(); ++i) {
-                uint32_t magic = *reinterpret_cast<const uint32_t*>(resp.data() + i);
+            for (size_t i = 0; i + 24 <= resp.size(); ++i) {
+                uint32_t magic = 0;
+                std::memcpy(&magic, resp.data() + i, sizeof(magic));
+
+                // messages.getFullChannel returns a GroupCall object, not an
+                // InputGroupCall. GroupCall has flags before id/access_hash.
+                if (magic == 0xefb2b617) {
+                    int64_t call_id = 0;
+                    int64_t call_hash = 0;
+                    std::memcpy(&call_id, resp.data() + i + 8, sizeof(call_id));
+                    std::memcpy(&call_hash, resp.data() + i + 16, sizeof(call_hash));
+                    if (call_id != 0 && call_hash != 0) {
+                        InputGroupCall call{call_id, call_hash, true};
+                        group_calls_[chat_id] = call;
+                        Logger::Info("TINAPROTO", "Found active GroupCall for chat " + std::to_string(chat_id) + " (id: " + std::to_string(call_id) + ")");
+                        return call;
+                    }
+                }
+
+                // Also accept an InputGroupCall object if one is present.
                 if (magic == 0xd8aa840f) {
-                    int64_t call_id = *reinterpret_cast<const int64_t*>(resp.data() + i + 4);
-                    int64_t call_hash = *reinterpret_cast<const int64_t*>(resp.data() + i + 12);
-                    InputGroupCall call{call_id, call_hash, true};
-                    group_calls_[chat_id] = call;
-                    Logger::Info("TINAPROTO", "Resolved InputGroupCall for chat " + std::to_string(chat_id) + " (id: " + std::to_string(call_id) + ")");
-                    return call;
+                    int64_t call_id = 0;
+                    int64_t call_hash = 0;
+                    std::memcpy(&call_id, resp.data() + i + 4, sizeof(call_id));
+                    std::memcpy(&call_hash, resp.data() + i + 12, sizeof(call_hash));
+                    if (call_id != 0 && call_hash != 0) {
+                        InputGroupCall call{call_id, call_hash, true};
+                        group_calls_[chat_id] = call;
+                        Logger::Info("TINAPROTO", "Resolved InputGroupCall for chat " + std::to_string(chat_id) + " (id: " + std::to_string(call_id) + ")");
+                        return call;
+                    }
                 }
             }
         }
@@ -559,7 +637,14 @@ std::optional<InputGroupCall> MtprotoClient::GetGroupCall(int64_t chat_id) {
     }
 
     Logger::Warn("TINAPROTO", "No active group call found in chat full response for " + std::to_string(chat_id));
-    return std::nullopt;
+
+    if (session_.is_bot) {
+        Logger::Warn("TINAPROTO", "Cannot auto-create a group call with a bot-authorized session");
+        return std::nullopt;
+    }
+
+    Logger::Info("TINAPROTO", "No active call exists; trying phone.createGroupCall for chat " + std::to_string(chat_id));
+    return CreateGroupCall(chat_id, channel_id, access_hash, "TinaMusic Voice Chat");
 }
 
 std::string MtprotoClient::JoinGroupCall(int64_t chat_id, const std::string& local_sdp_json) {
@@ -570,7 +655,7 @@ std::string MtprotoClient::JoinGroupCall(int64_t chat_id, const std::string& loc
     const auto& call = *call_opt;
 
     TlWriter w;
-    w.PutUint32(0xb132ff7b);
+    w.PutUint32(0x8fb53057); // phone.joinGroupCall (current layer schema)
     w.PutUint32(4);
     w.PutUint32(0xd8aa840f);
     w.PutInt64(call.id);
