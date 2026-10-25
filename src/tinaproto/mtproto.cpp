@@ -68,12 +68,22 @@ void MtprotoClient::Disconnect() {
     connected_ = false;
 }
 
+
 bool MtprotoClient::Connect(const SessionData& session) {
     std::lock_guard<std::mutex> lock(mtx_);
     if (connected_) {
         return true;
     }
+
     session_ = session;
+
+    // Diagnostic: identify the Telegram session authorization type
+    Logger::Info(
+        "TINAPROTO",
+        std::string("Session type: ") +
+        (session_.is_bot ? "BOT" : "USER")
+    );
+
     auth_key_id_ = Crypto::ComputeAuthKeyId(session_.auth_key);
     session_id_ = Crypto::GenerateSessionId();
     salt_ = 0;
@@ -85,27 +95,43 @@ bool MtprotoClient::Connect(const SessionData& session) {
         snprintf(h, sizeof(h), "%02x", b);
         key_id_hex += h;
     }
-    Logger::Info("TINAPROTO", "Auth key size: " + std::to_string(session_.auth_key.size()) + " auth_key_id: " + key_id_hex);
+
+    Logger::Info(
+        "TINAPROTO",
+        "Auth key size: " + std::to_string(session_.auth_key.size()) +
+        " auth_key_id: " + key_id_hex
+    );
 
     sock_ = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_ < 0) {
-        Logger::Error("TINAPROTO", "Failed to create TCP socket for DC " + session_.dc_ip);
+        Logger::Error(
+            "TINAPROTO",
+            "Failed to create TCP socket for DC " + session_.dc_ip
+        );
         return false;
     }
 
     struct timeval tv{};
     tv.tv_sec = 15;
     tv.tv_usec = 0;
-    setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
-    setsockopt(sock_, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+    setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO,
+               reinterpret_cast<const char*>(&tv), sizeof(tv));
+    setsockopt(sock_, SOL_SOCKET, SO_SNDTIMEO,
+               reinterpret_cast<const char*>(&tv), sizeof(tv));
 
     struct sockaddr_in server_addr{};
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(session_.dc_port);
     inet_pton(AF_INET, session_.dc_ip.c_str(), &server_addr.sin_addr);
 
-    if (connect(sock_, reinterpret_cast<struct sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
-        Logger::Error("TINAPROTO", "Failed to connect to DC " + session_.dc_ip + ":" + std::to_string(session_.dc_port));
+    if (connect(sock_,
+                reinterpret_cast<struct sockaddr*>(&server_addr),
+                sizeof(server_addr)) < 0) {
+        Logger::Error(
+            "TINAPROTO",
+            "Failed to connect to DC " + session_.dc_ip + ":" +
+            std::to_string(session_.dc_port)
+        );
         close(sock_);
         sock_ = -1;
         return false;
@@ -113,14 +139,22 @@ bool MtprotoClient::Connect(const SessionData& session) {
 
     uint8_t handshake[4] = {0xee, 0xee, 0xee, 0xee};
     if (send(sock_, handshake, 4, 0) != 4) {
-        Logger::Error("TINAPROTO", "Failed to send intermediate transport handshake");
+        Logger::Error(
+            "TINAPROTO",
+            "Failed to send intermediate transport handshake"
+        );
         close(sock_);
         sock_ = -1;
         return false;
     }
 
     connected_ = true;
-    Logger::Info("TINAPROTO", "Connected to Telegram DC " + session_.dc_ip + ":" + std::to_string(session_.dc_port));
+    Logger::Info(
+        "TINAPROTO",
+        "Connected to Telegram DC " + session_.dc_ip + ":" +
+        std::to_string(session_.dc_port)
+    );
+
     return true;
 }
 
