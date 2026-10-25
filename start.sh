@@ -51,5 +51,12 @@ if [ ! -f "bin/tina-music-bot" ]; then
     make -j1
 fi
 
+echo "[SYSTEM] [STARTUP] Resolving Telegram channel entities..."
+
+if ! /opt/peer-env/bin/python /app/generate_cache.py; then
+    echo "[SYSTEM] [WARNING] Peer cache refresh failed."
+    echo "[SYSTEM] [WARNING] Voice playback may fail for uncached channels."
+fi
+
 echo "[SYSTEM] [STARTUP] Launching pure C++20 TinaMusic engine..."
 exec ./bin/tina-music-bot
