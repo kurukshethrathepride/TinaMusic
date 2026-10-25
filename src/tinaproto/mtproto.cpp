@@ -428,23 +428,49 @@ bool MtprotoClient::LoadPeerCache(const std::string& cache_path) {
     }
 }
 
-bool MtprotoClient::ResolveChannel(int64_t chat_id, int64_t& out_channel_id, int64_t& out_access_hash) {
-    int64_t channel_id = chat_id;
-    if (channel_id < 0) {
-        channel_id = -channel_id;
+
+bool MtprotoClient::ResolveChannel(
+    int64_t chat_id,
+    int64_t& out_channel_id,
+    int64_t& out_access_hash)
+{
+    // Convert a Bot API supergroup/channel ID (-100XXXXXXXXXX)
+    // into the MTProto channel ID.
+    if (chat_id >= 0) {
+        Logger::Error("TINAPROTO", "Expected a negative Bot API channel ID");
+        return false;
     }
+
+    int64_t channel_id = -chat_id;
+
     if (channel_id > 1000000000000LL) {
         channel_id -= 1000000000000LL;
     }
+
+    if (channel_id <= 0) {
+        Logger::Error("TINAPROTO", "Invalid channel ID");
+        return false;
+    }
+
     out_channel_id = channel_id;
 
+    // First try the cached access hash.
     auto it = channel_access_hashes_.find(channel_id);
+
     if (it != channel_access_hashes_.end()) {
         out_access_hash = it->second;
         return true;
     }
+
+    Logger::Warn(
+        "TINAPROTO",
+        "Channel " + std::to_string(channel_id) +
+        " is not cached; MTProto entity resolution is required"
+    );
+
     return false;
 }
+
 
 std::optional<InputGroupCall> MtprotoClient::GetGroupCall(int64_t chat_id) {
     auto git = group_calls_.find(chat_id);
