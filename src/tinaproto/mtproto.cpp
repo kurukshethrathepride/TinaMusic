@@ -536,7 +536,7 @@ std::optional<InputGroupCall> MtprotoClient::CreateGroupCall(
     TlWriter w;
     w.PutUint32(0x48cdc6d8); // phone.createGroupCall
     w.PutUint32(1);          // flags: title is present
-    w.PutUint32(0xf35aec28); // inputPeerChannel
+    w.PutUint32(0x27bcbbfc); // inputPeerChannel (InputPeer constructor)
     w.PutInt64(channel_id);
     w.PutInt64(access_hash);
     w.PutInt32(random_id);
